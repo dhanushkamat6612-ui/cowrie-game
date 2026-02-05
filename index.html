@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cowrie Toss</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; background: #fff5e6; padding: 0; margin: 0; overflow: hidden; }
+    
+    /* Boot Logo Screen */
+    #boot-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #ffffff;
+      display: flex; justify-content: center; align-items: center;
+      z-index: 1000;
+      transition: opacity 0.6s ease-out;
+    }
+    #boot-logo { width: 85%; max-width: 400px; height: auto; }
+    
+    /* Game Area */
+    #game-container { padding: 40px 20px; opacity: 0; transition: opacity 0.5s; display: none; }
+    h2 { color: #3e2723; margin-bottom: 20px; }
+
+    /* Square Layout (2 up, 2 down) */
+    .cowries { 
+      margin: 20px auto; 
+      width: 180px; 
+      display: flex; 
+      justify-content: center; 
+      gap: 15px; 
+      flex-wrap: wrap; 
+    }
+    
+    .cowrie { width: 75px; height: auto; }
+
+    /* Spin Animation */
+    .spinning {
+      animation: toss 0.6s ease-out;
+    }
+
+    @keyframes toss {
+      0% { transform: scale(0.5) rotate(0deg); opacity: 0.5; }
+      50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+      100% { transform: scale(1) rotate(360deg); }
+    }
+    
+    button { 
+      padding: 18px 35px; font-size: 20px; background: #d32f2f; 
+      color: white; border: none; border-radius: 50px; font-weight: bold; 
+      cursor: pointer; box-shadow: 0 4px #9a0007; outline: none;
+      margin-top: 10px;
+    }
+    button:active { transform: translateY(2px); box-shadow: 0 2px #9a0007; }
+    button:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+    
+    #score { font-size: 40px; margin-top: 30px; font-weight: bold; color: #3e2723; min-height: 50px; }
+    .special-score { color: #d32f2f; animation: pulse 0.5s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+  </style>
+</head>
+<body>
+
+  <div id="boot-screen">
+    <img src="1000115831.png" id="boot-logo" alt="Logo">
+  </div>
+
+  <div id="game-container">
+    <h2>🐚 Cowrie Toss</h2>
+    <div class="cowries" id="cowrieArea">
+      <img src="curved.png" class="cowrie"><img src="curved.png" class="cowrie">
+      <img src="curved.png" class="cowrie"><img src="curved.png" class="cowrie">
+    </div>
+    <button id="tossBtn" onclick="throwCowries()">Throw Cowries</button>
+    <div id="score">Score: 0</div>
+  </div>
+
+  <script>
+    window.onload = () => {
+      setTimeout(() => {
+        const boot = document.getElementById('boot-screen');
+        const game = document.getElementById('game-container');
+        boot.style.opacity = '0';
+        game.style.display = 'block';
+        setTimeout(() => { 
+          boot.style.display = 'none'; 
+          game.style.opacity = '1';
+        }, 600);
+      }, 2500);
+    };
+
+    function throwCowries() {
+      const area = document.getElementById('cowrieArea');
+      const scoreDisplay = document.getElementById('score');
+      const btn = document.getElementById('tossBtn');
+      
+      // Disable button during animation
+      btn.disabled = true;
+      area.innerHTML = '';
+      scoreDisplay.innerText = "...";
+      
+      let hollowCount = 0;
+
+      for (let i = 0; i < 4; i++) {
+        const isHollow = Math.random() < 0.5;
+        const img = document.createElement('img');
+        
+        img.src = isHollow ? 'hollow.png' : 'curved.png';
+        img.className = 'cowrie spinning'; // Add animation class
+        area.appendChild(img);
+        
+        if (isHollow) hollowCount++;
+      }
+
+      // Wait for animation to finish before showing score
+      setTimeout(() => {
+        let points = (hollowCount === 0) ? 8 : hollowCount;
+        
+        if (hollowCount === 0) {
+          scoreDisplay.classList.add('special-score');
+        } else {
+          scoreDisplay.classList.remove('special-score');
+        }
+        
+        scoreDisplay.innerText = "Score: " + points;
+        btn.disabled = false;
+      }, 600);
+    }
+  </script>
+</body>
+</html>
