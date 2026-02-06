@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kamat Studios - Kaude Final</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; background: #fff5e6; padding: 0; margin: 0; touch-action: manipulation; }
+    #boot-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; justify-content: center; align-items: center; z-index: 2000; }
+    #setup-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff5e6; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1500; }
+    #game-container { padding: 10px; display: none; }
+    
+    .board { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 92vw; height: 92vw; max-width: 360px; max-height: 360px; margin: 10px auto; border: 3px solid #3e2723; background: #FFFDD0; }
+    .cell { border: 1px solid #3e2723; position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; transition: background 0.3s; }
+    
+    .inner-layer { background-color: #e8f5e9 !important; }
+    .win-block { background-color: #ffd700 !important; border: 3px double #3e2723; box-shadow: inset 0 0 10px rgba(0,0,0,0.2); }
+    
+    .safe { background-image: linear-gradient(45deg, transparent 48%, #3e2723 50%, transparent 52%), linear-gradient(-45deg, transparent 48%, #3e2723 50%, transparent 52%); }
+    .highlight { background-color: rgba(255, 255, 255, 0.5) !important; border: 4px solid #2e7d32 !important; z-index: 20; }
+    
+    .token { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #000; margin: 1px; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 5; }
+    .red-t { background: #ff5252; } .blue-t { background: #2196f3; } .green-t { background: #4caf50; } .yellow-t { background: #ffeb3b; }
+    .selected { transform: scale(1.8); box-shadow: 0 0 15px #000; z-index: 100; border-color: white; }
+
+    .cowrie { width: 45px; height: auto; transition: transform 0.1s; }
+    .spinning { animation: toss 0.6s ease-out; }
+    @keyframes toss { 0% { transform: scale(0.5) rotate(0deg); } 50% { transform: scale(1.3) rotate(180deg); } 100% { transform: scale(1) rotate(360deg); } }
+    
+    button { padding: 14px 30px; background: #d32f2f; color: white; border: none; border-radius: 50px; font-weight: bold; margin-top: 10px; font-size: 18px; box-shadow: 0 4px #9a0007; }
+    button:active { transform: translateY(2px); box-shadow: 0 2px #9a0007; }
+    button:disabled { background: #ccc; box-shadow: none; }
+    .turn-indicator { font-weight: bold; padding: 10px 25px; border-radius: 30px; color: white; margin-bottom: 10px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+  </style>
+</head>
+<body>
+
+  <div id="boot-screen"><img src="1000115831.png" style="width:75%; max-width:320px;"></div>
+
+  <div id="setup-screen">
+    <div style="background:white; padding:25px; border-radius:20px; width:85%; max-width:320px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+      <h2 style="color:#3e2723; margin-top:0;">Kaude Setup</h2>
+      <p style="color:#666;">How many are playing?</p>
+      <input type="number" id="pCount" min="2" max="4" value="2" oninput="drawInputs()" style="width:60px; text-align:center; padding:10px; font-size:18px;">
+      <div id="pNames" style="margin-top:15px;"></div>
+      <button onclick="launch()">Start Match</button>
+    </div>
+  </div>
+
+  <div id="game-container">
+    <div id="turn-box" class="turn-indicator"></div>
+    <div id="score" style="font-weight:bold; font-size:24px; color:#3e2723; margin: 10px;">Roll: 0</div>
+    <div id="cowrieArea" style="display:flex; justify-content:center; gap:8px; min-height:60px;"></div>
+    <button id="tossBtn" onclick="throwKaude()">Toss Cowries</button>
+    <div class="board" id="gameBoard"></div>
+  </div>
+
+  <script>
+    const outerRing = [2, 3, 4, 9, 14, 19, 24, 23, 22, 21, 20, 15, 10, 5, 0, 1];
+    const innerRing = [7, 8, 13, 18, 17, 16, 11, 6];
+    const winCell = 12;
+    const startSquares = [2, 22, 10, 14];
+    const colors = ['red', 'blue', 'green', 'yellow'];
+    const hex = { red: '#ff5252', blue: '#2196f3', green: '#4caf50', yellow: '#ffeb3b' };
+
+    let players = [], turnIdx = 0, roll = 0, cells = [];
+
+    function drawInputs() {
+      const c = Math.min(Math.max(document.getElementById('pCount').value, 2), 4);
+      const box = document.getElementById('pNames'); box.innerHTML = '';
+      for(let i=0; i<c; i++) box.innerHTML += `<input type="text" id="n${i}" style="width:85%; margin:6px; padding:10px; border:1px solid #ddd; border-radius:8px;" placeholder="${colors[i].toUpperCase()} Name">`;
+    }
+    drawInputs();
+
+    function launch() {
+      const c = document.getElementById('pCount').value;
+      for(let i=0; i<c; i++) {
+        let name = document.getElementById('n'+i).value || colors[i];
+        let startIdx = outerRing.indexOf(startSquares[i]);
+        let pPath = [];
+        // 1. Full Outer Revolution
+        for(let j=0; j<16; j++) pPath.push(outerRing[(startIdx + j) % 16]);
+        // 2. Inner Spiral Turn
+        let innerMap = { 2: 7, 22: 17, 10: 11, 14: 13 };
+        let innerStartVal = innerMap[startSquares[i]];
+        let innerStartIdx = innerRing.indexOf(innerStartVal);
+        for(let j=0; j<8; j++) pPath.push(innerRing[(innerStartIdx + j) % 8]);
+        // 3. Final Gold Square
+        pPath.push(winCell);
+        
+        players.push({ name, color: colors[i], start: startSquares[i], path: pPath, tokens: [0,0,0,0] });
+      }
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('game-container').style.display = 'block';
+      buildBoard();
+      updateUI();
+    }
+
+    function buildBoard() {
+      const b = document.getElementById('gameBoard');
+      for(let i=0; i<25; i++) {
+        let div = document.createElement('div');
+        div.className = 'cell';
+        if([2,10,14,22].includes(i)) div.classList.add('safe');
+        if([6,7,8,11,13,16,17,18].includes(i)) div.classList.add('inner-layer');
+        if(i === 12) div.classList.add('win-block', 'safe');
+        b.appendChild(div);
+        cells[i] = div;
+      }
+      players.forEach((p, pi) => {
+        for(let ti=0; ti<4; ti++) {
+          let t = document.createElement('div');
+          t.className = `token ${p.color}-t`;
+          t.onclick = (e) => handleToken(e, pi, ti, t);
+          cells[p.start].appendChild(t);
+          p['el'+ti] = t;
+        }
+      });
+    }
+
+    function throwKaude() {
+      const b = document.getElementById('tossBtn'); b.disabled = true;
+      let h = 0; const a = document.getElementById('cowrieArea'); a.innerHTML = '';
+      for(let i=0; i<4; i++) {
+        let isH = Math.random() < 0.5;
+        let img = document.createElement('img');
+        img.src = isH ? 'hollow.png' : 'curved.png';
+        img.className = 'cowrie spinning'; a.appendChild(img);
+        if(isH) h++;
+      }
+      setTimeout(() => {
+        roll = (h === 0) ? 8 : h;
+        document.getElementById('score').innerText = "Roll: " + roll;
+        if(roll === 4 || roll === 8) { b.disabled = false; document.getElementById('score').innerText += " (+1 Toss!)"; }
+      }, 600);
+    }
+
+    function handleToken(e, pi, ti, el) {
+      if(roll === 0 || pi !== turnIdx) return;
+      e.stopPropagation();
+      clear();
+      el.classList.add('selected');
+      let nextIdx = players[pi].tokens[ti] + roll;
+      if(nextIdx < players[pi].path.length) {
+        let target = players[pi].path[nextIdx];
+        cells[target].classList.add('highlight');
+        cells[target].onclick = () => {
+          let killed = false;
+          if(![2,10,12,14,22].includes(target)) {
+            players.forEach((opp, oi) => {
+              if(oi !== pi) {
+                for(let k=0; k<4; k++) {
+                  if(opp.path[opp.tokens[k]] === target && opp.tokens[k] !== 0) {
+                    cells[opp.start].appendChild(opp['el'+k]);
+                    opp.tokens[k] = 0; killed = true;
+                  }
+                }
+              }
+            });
+          }
+          cells[target].appendChild(el);
+          players[pi].tokens[ti] = nextIdx;
+          if(killed || roll === 4 || roll === 8) endTurn(false); else endTurn(true);
+        }
+      }
+    }
+
+    function clear() {
+      document.querySelectorAll('.cell').forEach(c => { c.classList.remove('highlight'); c.onclick = null; });
+      document.querySelectorAll('.token').forEach(t => t.classList.remove('selected'));
+    }
+
+    function endTurn(skip) {
+      if(skip) turnIdx = (turnIdx + 1) % players.length;
+      roll = 0; clear(); updateUI();
+      document.getElementById('tossBtn').disabled = false;
+    }
+
+    function updateUI() {
+      const p = players[turnIdx];
+      const b = document.getElementById('turn-box');
+      b.innerText = p.name.toUpperCase() + "'S TURN";
+      b.style.background = hex[p.color];
+      document.getElementById('score').innerText = "Roll: 0";
+    }
+
+    window.onload = () => setTimeout(() => {
+      document.getElementById('boot-screen').style.display = 'none';
+      document.getElementById('setup-screen').style.display = 'flex';
+    }, 2500);
+  </script>
+</body>
+</html>
