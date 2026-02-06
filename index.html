@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kamat Studios - Kaude</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; background: #fff5e6; padding: 0; margin: 0; touch-action: manipulation; }
+    #boot-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; justify-content: center; align-items: center; z-index: 2000; }
+    #setup-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff5e6; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1500; }
+    #game-container { padding: 10px; display: none; }
+
+    .setup-box { background: white; padding: 20px; border-radius: 15px; width: 85%; max-width: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    input { width: 80%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; }
+    
+    .board { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 92vw; height: 92vw; max-width: 360px; max-height: 360px; margin: 10px auto; border: 3px solid #3e2723; background: #fff; }
+    .cell { border: 1px solid #3e2723; position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; font-size: 10px; }
+    .safe { background-color: #ffcdd2; background-image: linear-gradient(45deg, transparent 48%, #3e2723 50%, transparent 52%), linear-gradient(-45deg, transparent 48%, #3e2723 50%, transparent 52%); }
+    .highlight { background-color: rgba(76, 175, 80, 0.5) !important; animation: pulse 0.8s infinite; }
+
+    .token { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid #000; margin: 1px; transition: 0.3s; z-index: 5; }
+    .red-t { background: #ff5252; } .green-t { background: #4caf50; } .blue-t { background: #2196f3; } .yellow-t { background: #ffeb3b; }
+    .selected { transform: scale(1.6); border: 2px solid white; z-index: 100; box-shadow: 0 0 8px #000; }
+
+    .cowrie { width: 40px; height: auto; }
+    .spinning { animation: toss 0.6s ease-out; }
+    @keyframes toss { 0% { transform: scale(0.5) rotate(0deg); } 50% { transform: scale(1.2) rotate(180deg); } 100% { transform: scale(1) rotate(360deg); } }
+    
+    button { padding: 12px 25px; background: #d32f2f; color: white; border: none; border-radius: 50px; font-weight: bold; margin-top: 5px; }
+    button:disabled { background: #ccc; }
+    .turn-indicator { font-weight: bold; padding: 8px 20px; border-radius: 5px; margin-bottom: 5px; color: white; display: inline-block; }
+  </style>
+</head>
+<body>
+
+  <div id="boot-screen"><img src="1000115831.png" style="width:70%; max-width:300px;"></div>
+
+  <div id="setup-screen">
+    <div class="setup-box">
+      <h3>Player Setup</h3>
+      <p>Number of Players (2-4):</p>
+      <input type="number" id="playerCount" min="2" max="4" value="2" oninput="generateInputs()">
+      <div id="nameInputs"></div>
+      <button onclick="startGame()">Start Match</button>
+    </div>
+  </div>
+
+  <div id="game-container">
+    <div id="turn-box" class="turn-indicator"></div>
+    <div id="score" style="font-weight:bold; font-size:20px;">Roll: 0</div>
+    <div class="cowries" id="cowrieArea" style="display:flex; justify-content:center; gap:5px; min-height:50px;"></div>
+    <button id="tossBtn" onclick="throwCowries()">Toss Cowries</button>
+    <div class="board" id="kaudeBoard"></div>
+  </div>
+
+  <script>
+    // Safe house indices (starting positions)
+    const startSquares = [2, 22, 10, 14]; // Top-mid, Bottom-mid, Left-mid, Right-mid
+    const safeIndices = [2, 10, 12, 14, 22];
+    const playerColors = ['red', 'blue', 'green', 'yellow'];
+    const hexColors = { red: '#ff5252', blue: '#2196f3', green: '#4caf50', yellow: '#ffeb3b' };
+    
+    // Each player's path needs to start from their specific safe house
+    // Here we define the general outer loop and inner spiral
+    const fullPath = [2, 1, 0, 5, 10, 15, 20, 21, 22, 23, 24, 19, 14, 9, 4, 3, 2, 7, 12, 17, 16, 11, 6, 7, 8, 13, 12];
+
+    let activePlayers = [];
+    let turnIdx = 0;
+    let currentRoll = 0;
+    let cells = [];
+
+    function generateInputs() {
+      const count = Math.min(Math.max(document.getElementById('playerCount').value, 2), 4);
+      const container = document.getElementById('nameInputs');
+      container.innerHTML = '';
+      for(let i=0; i<count; i++) {
+        container.innerHTML += `<input type="text" id="name${i}" placeholder="${playerColors[i].toUpperCase()} Player Name">`;
+      }
+    }
+    generateInputs();
+
+    function startGame() {
+      const count = document.getElementById('playerCount').value;
+      for(let i=0; i<count; i++) {
+        const name = document.getElementById('name'+i).value || `Player ${i+1}`;
+        activePlayers.push({ 
+          name, 
+          color: playerColors[i], 
+          startCell: startSquares[i],
+          pos: [0, 0, 0, 0] // Progress along the path
+        });
+      }
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('game-container').style.display = 'block';
+      initBoard();
+      updateTurnUI();
+    }
+
+    function initBoard() {
+      const board = document.getElementById('kaudeBoard');
+      for (let i = 0; i < 25; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell' + (safeIndices.includes(i) ? ' safe' : '');
+        board.appendChild(cell);
+        cells[i] = cell;
+      }
+
+      activePlayers.forEach((player, pIdx) => {
+        for(let tIdx=0; tIdx<4; tIdx++) {
+          const t = document.createElement('div');
+          t.className = `token ${player.color}-t`;
+          t.onclick = (e) => selectToken(e, pIdx, tIdx, t);
+          cells[player.startCell].appendChild(t);
+          player[`el${tIdx}`] = t;
+        }
+      });
+    }
+
+    function throwCowries() {
+      const btn = document.getElementById('tossBtn');
+      btn.disabled = true;
+      let hollowCount = 0;
+      const area = document.getElementById('cowrieArea');
+      area.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const isHollow = Math.random() < 0.5;
+        const img = document.createElement('img');
+        img.src = isHollow ? 'hollow.png' : 'curved.png';
+        img.className = 'cowrie spinning';
+        area.appendChild(img);
+        if (isHollow) hollowCount++;
+      }
+      setTimeout(() => {
+        currentRoll = (hollowCount === 0) ? 8 : hollowCount;
+        document.getElementById('score').innerText = "Roll: " + currentRoll;
+        if (currentRoll === 4 || currentRoll === 8) {
+          document.getElementById('score').innerText += " (EXTRA!)";
+          btn.disabled = false;
+        }
+      }, 600);
+    }
+
+    function selectToken(e, pIdx, tIdx, element) {
+      if (currentRoll === 0 || pIdx !== turnIdx) return;
+      e.stopPropagation();
+      document.querySelectorAll('.cell').forEach(c => { c.classList.remove('highlight'); c.onclick = null; });
+      document.querySelectorAll('.token').forEach(t => t.classList.remove('selected'));
+      
+      element.classList.add('selected');
+      const nextIdx = activePlayers[pIdx].pos[tIdx] + currentRoll;
+
+      if (nextIdx < fullPath.length) {
+        const targetCellIdx = fullPath[nextIdx];
+        cells[targetCellIdx].classList.add('highlight');
+        cells[targetCellIdx].onclick = () => moveToken(pIdx, tIdx, nextIdx);
+      }
+    }
+
+    function moveToken(pIdx, tIdx, newPathIdx) {
+      const targetCellIdx = fullPath[newPathIdx];
+      const targetCell = cells[targetCellIdx];
+      let kill = false;
+
+      if (!safeIndices.includes(targetCellIdx)) {
+        activePlayers.forEach((player, otherPIdx) => {
+          if (otherPIdx !== pIdx) {
+            for(let i=0; i<4; i++) {
+              if (fullPath[player.pos[i]] === targetCellIdx && player.pos[i] !== 0) {
+                cells[player.startCell].appendChild(player[`el${i}`]);
+                player.pos[i] = 0;
+                kill = true;
+              }
+            }
+          }
+        });
+      }
+
+      targetCell.appendChild(activePlayers[pIdx][`el${tIdx}`]);
+      activePlayers[pIdx].pos[tIdx] = newPathIdx;
+      
+      if (kill || currentRoll === 4 || currentRoll === 8) {
+        resetTurn(false);
+      } else {
+        resetTurn(true);
+      }
+    }
+
+    function resetTurn(next) {
+      if (next) turnIdx = (turnIdx + 1) % activePlayers.length;
+      currentRoll = 0;
+      updateTurnUI();
+      document.getElementById('tossBtn').disabled = false;
+      document.querySelectorAll('.cell').forEach(c => { c.classList.remove('highlight'); c.onclick = null; });
+    }
+
+    function updateTurnUI() {
+      const p = activePlayers[turnIdx];
+      const box = document.getElementById('turn-box');
+      box.innerText = p.name + "'s Turn";
+      box.style.background = hexColors[p.color];
+      document.getElementById('score').innerText = "Roll: 0";
+    }
+
+    window.onload = () => setTimeout(() => {
+      document.getElementById('boot-screen').style.display = 'none';
+      document.getElementById('setup-screen').style.display = 'flex';
+    }, 2000);
+  </script>
+</body>
+</html>
