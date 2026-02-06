@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kamat Studios - Kaude</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; background: #fff5e6; padding: 0; margin: 0; }
+    
+    /* Boot Logo Screen */
+    #boot-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #ffffff;
+      display: flex; justify-content: center; align-items: center;
+      z-index: 1000;
+      transition: opacity 0.6s ease-out;
+    }
+    #boot-logo { width: 85%; max-width: 400px; height: auto; }
+    
+    /* Game Area */
+    #game-container { padding: 20px; opacity: 0; transition: opacity 0.5s; display: none; }
+    
+    /* Tossing Area */
+    .cowries { margin: 10px auto; display: flex; justify-content: center; gap: 8px; min-height: 80px; }
+    .cowrie { width: 50px; height: auto; }
+    .spinning { animation: toss 0.6s ease-out; }
+    @keyframes toss {
+      0% { transform: scale(0.5) rotate(0deg); }
+      50% { transform: scale(1.2) rotate(180deg); }
+      100% { transform: scale(1) rotate(360deg); }
+    }
+
+    /* The Kaude Board (5x5 Grid) */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(5, 1fr);
+      width: 300px;
+      height: 300px;
+      margin: 20px auto;
+      border: 3px solid #3e2723;
+      background: #fff;
+    }
+    .cell {
+      border: 1px solid #3e2723;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+    }
+    /* Marked 'Safe' Houses (The X squares) */
+    .safe {
+      background-color: #ffcdd2;
+      background-image: linear-gradient(45deg, transparent 45%, #3e2723 45%, #3e2723 55%, transparent 55%),
+                        linear-gradient(-45deg, transparent 45%, #3e2723 45%, #3e2723 55%, transparent 55%);
+    }
+
+    button { 
+      padding: 12px 25px; font-size: 18px; background: #d32f2f; 
+      color: white; border: none; border-radius: 50px; font-weight: bold; 
+      cursor: pointer; box-shadow: 0 4px #9a0007;
+    }
+    button:disabled { background: #ccc; box-shadow: none; }
+    
+    #score { font-size: 28px; font-weight: bold; color: #3e2723; margin: 10px 0; }
+  </style>
+</head>
+<body>
+
+  <div id="boot-screen">
+    <img src="1000115831.png" id="boot-logo" alt="Logo">
+  </div>
+
+  <div id="game-container">
+    <div id="score">Roll: 0</div>
+    
+    <div class="cowries" id="cowrieArea">
+      <img src="curved.png" class="cowrie"><img src="curved.png" class="cowrie">
+      <img src="curved.png" class="cowrie"><img src="curved.png" class="cowrie">
+    </div>
+
+    <button id="tossBtn" onclick="throwCowries()">Toss Kaude</button>
+
+    <div class="board" id="kaudeBoard"></div>
+  </div>
+
+  <script>
+    // Generate the 5x5 Board
+    const board = document.getElementById('kaudeBoard');
+    const safeCells = [2, 10, 12, 14, 22]; // Traditional safe spots in a 5x5 grid
+
+    for (let i = 0; i < 25; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      if (safeCells.includes(i)) {
+        cell.classList.add('safe');
+      }
+      board.appendChild(cell);
+    }
+
+    // Boot Logic
+    window.onload = () => {
+      setTimeout(() => {
+        document.getElementById('boot-screen').style.opacity = '0';
+        document.getElementById('game-container').style.display = 'block';
+        setTimeout(() => { 
+          document.getElementById('boot-screen').style.display = 'none'; 
+          document.getElementById('game-container').style.opacity = '1';
+        }, 600);
+      }, 2000);
+    };
+
+    // Tossing Logic
+    function throwCowries() {
+      const area = document.getElementById('cowrieArea');
+      const scoreDisplay = document.getElementById('score');
+      const btn = document.getElementById('tossBtn');
+      
+      btn.disabled = true;
+      area.innerHTML = '';
+      
+      let hollowCount = 0;
+      for (let i = 0; i < 4; i++) {
+        const isHollow = Math.random() < 0.5;
+        const img = document.createElement('img');
+        img.src = isHollow ? 'hollow.png' : 'curved.png';
+        img.className = 'cowrie spinning'; 
+        area.appendChild(img);
+        if (isHollow) hollowCount++;
+      }
+
+      setTimeout(() => {
+        let points = (hollowCount === 0) ? 8 : hollowCount;
+        scoreDisplay.innerText = "Roll: " + points;
+        btn.disabled = false;
+      }, 600);
+    }
+  </script>
+</body>
+</html>
