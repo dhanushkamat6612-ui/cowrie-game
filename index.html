@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kamat Studio - Chowka Bara</title>
+    <style>
+        :root {
+            --board: #f2d9a4; --lines: #5d4037; --safe: #9ccc65;
+            --p1: #e53935; --p2: #1e88e5; --p3: #2e7d32; --p4: #fbc02d;
+        }
+
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+
+        /* Screens */
+        .screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s ease; }
+        #boot-screen { background: black; }
+        #setup-screen { background: #1a1a1a; display: none; }
+        #game-screen { display: none; overflow-y: auto; background: #263238; position: relative; }
+
+        /* Boot Image */
+        .boot-logo { width: 300px; height: auto; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        /* Setup UI */
+        .btn-group { display: flex; gap: 20px; margin-top: 20px; }
+        .setup-btn { padding: 20px 40px; font-size: 1.5rem; cursor: pointer; border: none; border-radius: 10px; background: #ffa000; color: white; font-weight: bold; }
+
+        /* Game UI */
+        .board { display: grid; grid-template-columns: repeat(5, 60px); grid-template-rows: repeat(5, 60px); gap: 2px; background: var(--lines); border: 5px solid var(--lines); margin: 20px; }
+        .cell { background: var(--board); display: flex; justify-content: center; align-items: center; position: relative; width: 60px; height: 60px; }
+        .safe { background-color: var(--safe); background-image: repeating-linear-gradient(45deg, transparent, transparent 38px, var(--lines) 40px), repeating-linear-gradient(-45deg, transparent, transparent 38px, var(--lines) 40px); }
+
+        .pawn { width: 18px; height: 18px; border-radius: 50%; border: 2px solid white; position: absolute; cursor: pointer; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .p1 { background: var(--p1); } .p2 { background: var(--p2); } .p3 { background: var(--p3); } .p4 { background: var(--p4); }
+
+        .kaude-box { display: flex; gap: 10px; margin: 15px; }
+        .kaude-img { width: 50px; height: 50px; object-fit: contain; }
+        
+        .ui-panel { text-align: center; padding: 20px; width: 100%; }
+        .roll-btn { padding: 15px 30px; font-size: 1.2rem; background: #ffa000; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; }
+        .roll-btn:disabled { background: #555; }
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen" class="screen">
+        <img src="1000116381.png" class="boot-logo" alt="Kamat Studio Logo">
+        <p>Loading Traditional Chowka Bara...</p>
+    </div>
+
+    <div id="setup-screen" class="screen">
+        <h1>Select Number of Players</h1>
+        <div class="btn-group">
+            <button class="setup-btn" onclick="startGame(2)">2 Players</button>
+            <button class="setup-btn" onclick="startGame(3)">3 Players</button>
+            <button class="setup-btn" onclick="startGame(4)">4 Players</button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div class="ui-panel">
+            <h2 id="turn-txt" style="color: var(--p1)">Player 1's Turn</h2>
+            <div class="kaude-box">
+                <img id="k0" src="Hollow.png" class="kaude-img">
+                <img id="k1" src="Hollow.png" class="kaude-img">
+                <img id="k2" src="Hollow.png" class="kaude-img">
+                <img id="k3" src="Hollow.png" class="kaude-img">
+            </div>
+            <button id="rollBtn" class="roll-btn" onclick="roll()">Roll Kaude</button>
+            <h2 id="scoreText">Score: -</h2>
+        </div>
+        <div class="board" id="game-board"></div>
+    </div>
+
+    <script>
+        const paths = {
+            1: ["4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","3,1","2,1","1,1","1,2","1,3","2,3","3,3","3,2","2,2"],
+            2: ["0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","1,3","2,3","3,3","3,2","3,1","2,1","1,1","1,2","2,2"],
+            3: ["2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","3,3","3,2","3,1","2,1","1,1","1,2","1,3","2,3","2,2"],
+            4: ["2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","1,1","1,2","1,3","2,3","3,3","3,2","3,1","2,1","2,2"]
+        };
+
+        let totalPlayers = 2;
+        let turn = 1;
+        let lastScore = 0;
+        let movePending = false;
+        let playerPawns = {};
+
+        // Sequence control
+        window.onload = () => {
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.display = 'none';
+                document.getElementById('setup-screen').style.display = 'flex';
+            }, 3000); // 3 second boot screen
+        };
+
+        function startGame(num) {
+            totalPlayers = num;
+            for(let i=1; i<=num; i++) playerPawns[i] = [0,0,0,0]; // 4 pawns each
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            createBoard();
+        }
+
+        function createBoard() {
+            const b = document.getElementById('game-board');
+            for(let r=0; r<5; r++) {
+                for(let c=0; c<5; c++) {
+                    let div = document.createElement('div');
+                    div.id = `cell-${r}-${c}`;
+                    div.className = 'cell' + (["0,2","2,0","2,2","2,4","4,2"].includes(`${r},${c}`) ? ' safe' : '');
+                    b.appendChild(div);
+                }
+            }
+            render();
+        }
+
+        function roll() {
+            let hollowCount = 0;
+            for(let i=0; i<4; i++) {
+                let isHollow = Math.random() > 0.5;
+                document.getElementById(`k${i}`).src = isHollow ? "Hollow.png" : "Curved.png";
+                if(isHollow) hollowCount++;
+            }
+            
+            // Score Logic: 0 Hollow = 8, 4 Hollow = 4
+            if (hollowCount === 0) lastScore = 8;
+            else if (hollowCount === 4) lastScore = 4;
+            else lastScore = hollowCount;
+
+            document.getElementById('scoreText').innerText = "Score: " + lastScore;
+            document.getElementById('rollBtn').disabled = true;
+            movePending = true;
+        }
+
+        function render() {
+            document.querySelectorAll('.pawn').forEach(p => p.remove());
+            for (let pNum in playerPawns) {
+                playerPawns[pNum].forEach((posIdx, i) => {
+                    const coords = paths[pNum][posIdx];
+                    const cell = document.getElementById(`cell-${coords}`);
+                    const p = document.createElement('div');
+                    p.className = `pawn p${pNum}`;
+                    // Grid offset for 4 pawns per cell
+                    p.style.left = (i % 2 === 0 ? 10 : 32) + "px";
+                    p.style.top = (i < 2 ? 10 : 32) + "px";
+                    p.onclick = () => handleMove(parseInt(pNum), i);
+                    cell.appendChild(p);
+                });
+            }
+        }
+
+        function handleMove(player, pIdx) {
+            if(!movePending || player !== turn) return;
+            
+            if(playerPawns[player][pIdx] + lastScore < paths[player].length) {
+                playerPawns[player][pIdx] += lastScore;
+                turn = (turn % totalPlayers) + 1;
+                document.getElementById('turn-txt').innerText = `Player ${turn}'s Turn`;
+                document.getElementById('turn-txt').style.color = `var(--p${turn})`;
+                document.getElementById('rollBtn').disabled = false;
+                movePending = false;
+                render();
+            } else {
+                alert("Home square reached/exceeded!");
+            }
+        }
+    </script>
+</body>
+</html>
