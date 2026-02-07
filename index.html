@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kaude - Kamat Studio</title>
+    <style>
+        :root { --bg: #fff5e6; --board: #3e2723; --inner: #e8f5e9; --wait: #a5d6a7; --gold: #ffd700; }
+        body { text-align: center; font-family: sans-serif; background: var(--bg); margin: 0; overflow: hidden; }
+        
+        /* Boot screen with 404 Protection */
+        #boot-screen { position: fixed; inset: 0; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 5000; transition: opacity 0.5s; }
+        .logo-placeholder { color: white; font-size: 2rem; border: 2px solid white; padding: 20px; letter-spacing: 5px; }
+
+        #game-container { display: none; padding: 10px; }
+        .board { display: grid; grid-template-columns: repeat(5, 1fr); width: 90vw; height: 90vw; max-width: 400px; max-height: 400px; margin: 15px auto; border: 4px solid var(--board); background: #FFFDD0; }
+        .cell { border: 0.5px solid rgba(62,39,35,0.2); position: relative; display: flex; justify-content: center; align-items: center; }
+        
+        /* Path Styling */
+        .inner { background-color: var(--inner) !important; }
+        .waiting { background-color: var(--wait) !important; border: 2px solid green !important; }
+        .goal { background-color: var(--gold) !important; font-weight: bold; }
+        .safe { background-image: linear-gradient(45deg, transparent 45%, #3e2723 50%, transparent 55%), linear-gradient(-45deg, transparent 45%, #3e2723 50%, transparent 55%); }
+
+        /* Tokens */
+        .token { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #000; position: absolute; transition: all 0.4s ease; z-index: 10; cursor: pointer; }
+        .red { background: #ff5252; } .blue { background: #2196f3; } .green { background: #4caf50; } .yellow { background: #ffeb3b; }
+
+        #tossBtn { padding: 15px 40px; background: #d32f2f; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<div id="boot-screen">
+    <img src="1000116381.png" alt="KAMAT STUDIO" class="logo-placeholder" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+    <h2 style="color:white; display:none;">KAMAT STUDIO</h2>
+</div>
+
+<div id="game-container">
+    <div style="margin-bottom:10px;">
+        <span id="p-name" style="padding:5px 15px; border-radius:15px; color:white; font-weight:bold;"></span>
+        <span id="roll-val" style="font-size:1.5rem; margin-left:15px; font-weight:bold;">Roll: -</span>
+    </div>
+    <div class="board" id="board"></div>
+    <button id="tossBtn" onclick="doToss()">TOSS</button>
+</div>
+
+
+
+<script>
+    const outer = [2,1,0,5,10,15,20,21,22,23,24,19,14,9,4,3];
+    const starts = [2, 22, 10, 14];
+    const inners = [
+        [7,6,11,16,17,18,13,8], // Red
+        [17,18,13,8,7,6,11,16], // Blue
+        [11,16,17,18,13,8,7,6], // Green
+        [13,8,7,6,11,16,17,18]  // Yellow
+    ];
+
+    let turn = 0, roll = 0, players = [];
+
+    function init() {
+        const b = document.getElementById('board');
+        for(let i=0; i<25; i++) {
+            let c = document.createElement('div');
+            c.className = 'cell';
+            c.id = 'c' + i;
+            if([2,10,14,22].includes(i)) c.classList.add('safe');
+            if([6,7,8,11,13,16,17,18].includes(i)) c.classList.add('inner');
+            if([7,11,13,17].includes(i)) c.classList.add('waiting');
+            if(i==12) { c.classList.add('goal'); c.innerText="GOAL"; }
+            b.appendChild(c);
+        }
+
+        ['red','blue','green','yellow'].forEach((color, i) => {
+            let path = [];
+            let sIdx = outer.indexOf(starts[i]);
+            for(let j=0; j<15; j++) path.push(outer[(sIdx+j)%16]);
+            path.push(...inners[i], 12);
+
+            players.push({ color, path, tokens: [0,0,0,0] });
+            for(let t=0; t<4; t++) {
+                let el = document.createElement('div');
+                el.className = `token ${color}`;
+                el.onclick = () => move(i, t);
+                document.getElementById('c'+starts[i]).appendChild(el);
+                players[i]['el'+t] = el;
+            }
+        });
+        update();
+    }
+
+    function doToss() {
+        let r = Math.random();
+        // 10% rarity for 4 and 8
+        if(r < 0.05) roll = 4;
+        else if(r < 0.10) roll = 8;
+        else roll = Math.floor(Math.random()*3)+1;
+        
+        document.getElementById('roll-val').innerText = "Roll: " + roll;
+        document.getElementById('tossBtn').disabled = (roll !== 4 && roll !== 8);
+    }
+
+    function move(pIdx, tIdx) {
+        if(pIdx !== turn || roll === 0) return;
+        let p = players[pIdx];
+        let nextPos = p.tokens[tIdx] + roll;
+        if(nextPos < p.path.length) {
+            let target = p.path[nextPos];
+            // Kill logic
+            if(![2,10,12,14,22].includes(target)) {
+                players.forEach((opp, oi) => {
+                    if(oi !== pIdx) {
+                        opp.tokens.forEach((pos, ti) => {
+                            if(opp.path[pos] === target) {
+                                opp.tokens[ti] = 0;
+                                document.getElementById('c'+starts[oi]).appendChild(opp['el'+ti]);
+                            }
+                        });
+                    }
+                });
+            }
+            p.tokens[tIdx] = nextPos;
+            document.getElementById('c'+target).appendChild(p['el'+tIdx]);
+            if(roll !== 4 && roll !== 8) turn = (turn + 1) % 4;
+            roll = 0; update();
+        }
+    }
+
+    function update() {
+        const name = document.getElementById('p-name');
+        name.innerText = players[turn].color.toUpperCase() + "'S TURN";
+        name.style.background = players[turn].color;
+        document.getElementById('tossBtn').disabled = false;
+        document.getElementById('roll-val').innerText = "Roll: -";
+    }
+
+    window.onload = () => {
+        setTimeout(() => {
+            document.getElementById('boot-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.display = 'none';
+                document.getElementById('game-container').style.display = 'block';
+                init();
+            }, 500);
+        }, 2000);
+    };
+</script>
+</body>
+</html>
