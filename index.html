@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4-Player Chowka Bara</title>
+    <style>
+        :root {
+            --board: #f2d9a4;
+            --lines: #5d4037;
+            --safe: #9ccc65;
+            --p1: #e53935; --p2: #1e88e5; --p3: #2e7d32; --p4: #fbc02d;
+        }
+
+        body { background-color: #263238; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+        
+        .board {
+            display: grid; grid-template-columns: repeat(5, 60px); grid-template-rows: repeat(5, 60px);
+            gap: 2px; background: var(--lines); border: 5px solid var(--lines); margin-top: 10px;
+        }
+
+        .cell { background: var(--board); display: flex; justify-content: center; align-items: center; position: relative; }
+        .safe { background-color: var(--safe); background-image: repeating-linear-gradient(45deg, transparent, transparent 38px, var(--lines) 40px), repeating-linear-gradient(-45deg, transparent, transparent 38px, var(--lines) 40px); }
+
+        .pawn { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; position: absolute; cursor: pointer; z-index: 10; transition: 0.3s; }
+        .p1 { background: var(--p1); } .p2 { background: var(--p2); } .p3 { background: var(--p3); } .p4 { background: var(--p4); }
+
+        .kaude-box { display: flex; gap: 10px; margin: 15px; }
+        .kaude { width: 40px; height: 28px; border-radius: 40% 40% 50% 50%; border: 1px solid #777; transition: 0.3s; }
+        .hollow { background: #fff; position: relative; }
+        .hollow::after { content: ''; position: absolute; width: 3px; height: 18px; background: #333; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; }
+        .curved { background: #b08d57; box-shadow: inset 0 -4px 6px rgba(0,0,0,0.3); transform: rotateX(180deg); }
+
+        .ui-panel { text-align: center; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 15px; }
+        button { padding: 12px 25px; font-weight: bold; cursor: pointer; background: #ffa000; border: none; border-radius: 5px; font-size: 1rem; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .player-indicator { padding: 5px 15px; border-radius: 5px; margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="ui-panel">
+        <div id="turn-txt" class="player-indicator" style="background: var(--p1)">Player 1's Turn</div>
+        <div class="kaude-box">
+            <div id="k0" class="kaude hollow"></div>
+            <div id="k1" class="kaude hollow"></div>
+            <div id="k2" class="kaude hollow"></div>
+            <div id="k3" class="kaude hollow"></div>
+        </div>
+        <button id="rollBtn" onclick="roll()">Roll Kaude</button>
+        <h2 id="score">Score: -</h2>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <script>
+        const paths = {
+            1: ["4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","3,1","2,1","1,1","1,2","1,3","2,3","3,3","3,2","2,2"],
+            2: ["2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","3,3","3,2","3,1","2,1","1,1","1,2","1,3","2,3","2,2"],
+            3: ["0,2","0,1","0,0","1,0","2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","1,3","2,3","3,3","3,2","3,1","2,1","1,1","1,2","2,2"],
+            4: ["2,0","3,0","4,0","4,1","4,2","4,3","4,4","3,4","2,4","1,4","0,4","0,3","0,2","0,1","0,0","1,0","1,1","1,2","1,3","2,3","3,3","3,2","3,1","2,1","2,2"]
+        };
+
+        let turn = 1;
+        let lastScore = 0;
+        let movePending = false;
+        let playerPawns = { 1: [0,0], 2: [0,0], 3: [0,0], 4: [0,0] }; // 2 pawns each for simplicity
+
+        function createBoard() {
+            const b = document.getElementById('board');
+            for(let r=0; r<5; r++) {
+                for(let c=0; c<5; c++) {
+                    let div = document.createElement('div');
+                    div.id = `cell-${r}-${c}`;
+                    div.className = 'cell' + (["0,2","2,0","2,2","2,4","4,2"].includes(`${r},${c}`) ? ' safe' : '');
+                    b.appendChild(div);
+                }
+            }
+            render();
+        }
+
+        function roll() {
+            let hollowCount = 0;
+            for(let i=0; i<4; i++) {
+                let isHollow = Math.random() > 0.5;
+                document.getElementById(`k${i}`).className = isHollow ? 'kaude hollow' : 'kaude curved';
+                if(isHollow) hollowCount++;
+            }
+            // Logic: 0 up = 8, 4 up = 4, else count
+            if (hollowCount === 0) lastScore = 8;
+            else if (hollowCount === 4) lastScore = 4;
+            else lastScore = hollowCount;
+
+            document.getElementById('score').innerText = "Score: " + lastScore;
+            document.getElementById('rollBtn').disabled = true;
+            movePending = true;
+        }
+
+        function render() {
+            document.querySelectorAll('.pawn').forEach(p => p.remove());
+            for (let pNum in playerPawns) {
+                playerPawns[pNum].forEach((posIdx, i) => {
+                    const coords = paths[pNum][posIdx];
+                    const cell = document.getElementById(`cell-${coords}`);
+                    const p = document.createElement('div');
+                    p.className = `pawn p${pNum}`;
+                    // Offset for multiple pawns in one cell
+                    p.style.marginLeft = (i * 12 - 6) + "px";
+                    p.style.marginTop = (pNum * 4 - 8) + "px";
+                    p.onclick = () => handleMove(parseInt(pNum), i);
+                    cell.appendChild(p);
+                });
+            }
+        }
+
+        function handleMove(player, pIdx) {
+            if(!movePending || player !== turn) return;
+            
+            if(playerPawns[player][pIdx] + lastScore < paths[player].length) {
+                playerPawns[player][pIdx] += lastScore;
+                
+                // End turn and move to next player (1->2->3->4->1)
+                turn = (turn % 4) + 1;
+                const txt = document.getElementById('turn-txt');
+                txt.innerText = `Player ${turn}'s Turn`;
+                txt.style.background = `var(--p${turn})`;
+                
+                document.getElementById('rollBtn').disabled = false;
+                movePending = false;
+                render();
+            } else {
+                alert("Cannot move! Score too high for home.");
+            }
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
