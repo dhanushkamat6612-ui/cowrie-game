@@ -1,0 +1,207 @@
+<script>
+  // Grid Logic
+  const outerRing = [2, 1, 0, 5, 10, 15, 20, 21, 22, 23, 24, 19, 14, 9, 4, 3];
+  const innerRing = [7, 6, 11, 16, 17, 18, 13, 8];
+  const startSquares = [2, 22, 10, 14];
+  const colors = ['red', 'blue', 'green', 'yellow'];
+  const hex = { red: '#ff5252', blue: '#2196f3', green: '#4caf50', yellow: '#ffeb3b' };
+
+  let players = [], turnIdx = 0, roll = 0, cells = [];
+
+  function drawInputs() {
+    const c = document.getElementById('pCount').value;
+    const box = document.getElementById('pNames'); 
+    box.innerHTML = '';
+    for(let i=0; i<c; i++) {
+      box.innerHTML += `<input type="text" id="n${i}" 
+        style="width:85%; margin:5px; padding:8px;" 
+        placeholder="${colors[i].toUpperCase()} Name">`;
+    }
+  }
+  drawInputs();
+
+  function launch() {
+    const c = document.getElementById('pCount').value;
+    players = [];
+
+    for(let i=0; i<c; i++) {
+      let name = document.getElementById('n'+i).value || colors[i];
+      let startGrid = startSquares[i];
+      let startIdxInOuter = outerRing.indexOf(startGrid);
+      let pPath = [];
+      
+      // ---- Outer Ring Movement (full round)
+      for(let j=0; j<15; j++) {
+        pPath.push(outerRing[(startIdxInOuter + j) % 16]);
+      }
+      
+      // ---- Entry mapping
+      const entryMap = { 2: 7, 22: 17, 10: 11, 14: 13 };
+      let innerIdx = innerRing.indexOf(entryMap[startGrid]);
+      
+      // ---- TRUE inward spiral (NO LOOPING)
+      for(let j = innerIdx; j < innerRing.length; j++) {
+        pPath.push(innerRing[j]);
+      }
+
+      // ---- Center finish
+      pPath.push(12);
+
+      players.push({ 
+        name, 
+        color: colors[i], 
+        start: startGrid, 
+        path: pPath, 
+        tokens: [0,0,0,0], 
+        finished: 0 
+      });
+    }
+
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    buildBoard();
+    updateUI();
+  }
+
+  function buildBoard() {
+    const b = document.getElementById('gameBoard');
+    b.innerHTML = '';
+    cells = [];
+
+    for(let i=0; i<25; i++) {
+      let div = document.createElement('div');
+      div.className = 'cell';
+
+      if([2,10,14,22].includes(i)) div.classList.add('safe');
+      if([6,7,8,11,13,16,17,18].includes(i)) div.classList.add('inner-layer');
+      if([7,11,13,17].includes(i)) div.classList.add('waiting-box');
+      if(i === 12) div.classList.add('win-block','safe');
+
+      b.appendChild(div);
+      cells[i] = div;
+    }
+
+    players.forEach((p, pi) => {
+      for(let ti=0; ti<4; ti++) {
+        let t = document.createElement('div');
+        t.className = `token ${p.color}-t`;
+        t.onclick = (e) => handleToken(e, pi, ti, t);
+        cells[p.start].appendChild(t);
+        p['el'+ti] = t;
+      }
+    });
+  }
+
+  function throwKaude() {
+    const b = document.getElementById('tossBtn'); 
+    b.disabled = true;
+
+    let a = document.getElementById('cowrieArea'); 
+    a.innerHTML = '';
+
+    let testH = 0;
+    for(let i=0; i<4; i++) if(Math.random() < 0.5) testH++;
+      
+    let rarityCheck = Math.random() * 100;
+    let rawH = ((testH === 4 || testH === 0) && rarityCheck > 10) 
+                ? (Math.floor(Math.random() * 3) + 1) 
+                : testH;
+      
+    for(let i=0; i<4; i++) {
+      let isH = (i < rawH);
+      let img = document.createElement('img');
+      img.src = isH ? 'hollow.png' : 'curved.png';
+      img.className = 'cowrie spinning'; 
+      a.appendChild(img);
+    }
+
+    setTimeout(() => {
+      roll = (rawH === 0) ? 8 : rawH;
+      document.getElementById('score').innerText = "Roll: " + roll;
+      if(roll === 4 || roll === 8) b.disabled = false;
+    }, 600);
+  }
+
+  function handleToken(e, pi, ti, el) {
+    if(roll === 0 || pi !== turnIdx) return;
+    if(players[pi].tokens[ti] === players[pi].path.length-1) return;
+
+    e.stopPropagation(); 
+    clear(); 
+    el.classList.add('selected');
+
+    let nextIdx = players[pi].tokens[ti] + roll;
+
+    if(nextIdx < players[pi].path.length) {
+      let targetGrid = players[pi].path[nextIdx];
+      cells[targetGrid].classList.add('highlight');
+
+      cells[targetGrid].onclick = () => {
+
+        // Kill logic
+        if(![2,10,12,14,22].includes(targetGrid)) {
+          players.forEach((opp, oi) => {
+            if(oi !== pi) {
+              for(let k=0; k<4; k++) {
+                if(opp.path[opp.tokens[k]] === targetGrid && opp.tokens[k] !== 0) {
+                  cells[opp.start].appendChild(opp['el'+k]);
+                  opp.tokens[k] = 0;
+                }
+              }
+            }
+          });
+        }
+
+        cells[targetGrid].appendChild(el);
+        players[pi].tokens[ti] = nextIdx;
+
+        // Finish
+        if(nextIdx === players[pi].path.length-1) { 
+          el.style.opacity = "0.3"; 
+          players[pi].finished++; 
+          checkWinner(pi); 
+        }
+
+        if(roll === 4 || roll === 8) endTurn(false); 
+        else endTurn(true);
+      };
+    }
+  }
+
+  function checkWinner(pi) { 
+    if(players[pi].finished === 4) { 
+      alert(players[pi].name + " WINS!"); 
+      location.reload(); 
+    } 
+  }
+
+  function clear() { 
+    document.querySelectorAll('.cell').forEach(c => { 
+      c.classList.remove('highlight'); 
+      c.onclick = null; 
+    }); 
+    document.querySelectorAll('.token').forEach(t => t.classList.remove('selected')); 
+  }
+
+  function endTurn(skip) { 
+    if(skip) turnIdx = (turnIdx + 1) % players.length; 
+    roll = 0; 
+    clear(); 
+    updateUI(); 
+    document.getElementById('tossBtn').disabled = false; 
+  }
+
+  function updateUI() { 
+    const p = players[turnIdx]; 
+    const b = document.getElementById('turn-box'); 
+    b.innerText = p.name.toUpperCase() + "'S TURN"; 
+    b.style.background = hex[p.color]; 
+    document.getElementById('score').innerText = "Roll: 0"; 
+  }
+
+  window.onload = () => 
+    setTimeout(() => { 
+      document.getElementById('boot-screen').style.display = 'none'; 
+      document.getElementById('setup-screen').style.display = 'flex'; 
+    }, 3000);
+                     </script>
